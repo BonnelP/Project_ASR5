@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
-//#include <error.h>
+#include <error.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 #endif
 
@@ -72,16 +73,4 @@ int EnvoieMessage(int s, const char* format, ...);
  */
 int TestLecture(int s);
 
-
-
-//Insertion Noeud
-
-//récuperation de l'ip de la machine (local) pour l'envoyer
-/**
- *Récupère l'ip de la machine
- *@param Hostname : nom de la machine
- *@return void : affiche l'ip
- *
-
- */
-void GetIp();
+char *fgets_nonbloquant(char *Saisi, const int taille, FILE *f);

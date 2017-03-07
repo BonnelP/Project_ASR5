@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "socklib.h"
 
@@ -403,38 +404,30 @@ int TestLecture(int s) {
 }
 
 
+char *fgets_nonbloquant(char *Saisi, const int taille, FILE *f) {
+  int oldattr = fcntl(fileno(f), F_GETFL);
+  if (oldattr==-1)
+    {
+      perror("fcntl");
+      exit(1);
+    }
+  // on ajoute l'option non blocante
+  int r = fcntl(fileno(f), F_SETFL, oldattr | O_NONBLOCK);
+  if (r==-1)
+    {
+      perror("fcntl");
+      exit(1);
+    }
+
+  char * res = fgets(Saisi,taille,stdin);
 
 
+  r = fcntl(fileno(f), F_SETFL, oldattr);
+  if (r==-1)
+    {
+      perror("fcntl");
+      exit(1);
+    }
 
-
-//Insertion dans le noeud
-
-//recuperation de l'ip de la machine (local) pour l'envoyer
-void GetIp() 
-{ 
-    struct hostent * host; 
-    struct in_addr addr; 
-    char *IPName;
-    char HostName[256];
-    if(gethostname(HostName,sizeof(HostName)) == 0)
-      printf("%s\n",HostName);
-    else
-      fprintf(stderr,"Gethostname a echoue. \n");
-
-    
-    if ((host = gethostbyname(HostName)) != NULL) 
-    { 
-        int i; 
-  
-        for(i = 0; host->h_addr_list[i] != NULL; i++) 
-        { 
-            memcpy(&addr.s_addr, host->h_addr_list[i], sizeof(addr.s_addr)); 
-	    IPName=inet_ntoa(addr);
-	    printf("IP de %s : %s\n",HostName, IPName); 
-        } 
-    } 
-    else 
-        printf("La fonction gethostbyname a echoue.\n");
-
+  return res;
 }
-
