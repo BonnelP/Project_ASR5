@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,6 +17,8 @@
 #define TAILLE_BUFF 10
 #define FALSE 0
 #define TRUE 1
+
+#define HOSTNAMELEN 64
 
 
 int CreeSocketServeur(const char* port) {
@@ -399,4 +402,39 @@ int TestLecture(int s) {
   return res;
 }
 
+
+
+
+
+
+//Insertion dans le noeud
+
+//recuperation de l'ip de la machine (local) pour l'envoyer
+void GetIp() 
+{ 
+    struct hostent * host; 
+    struct in_addr addr; 
+    char *IPName;
+    char HostName[256];
+    if(gethostname(HostName,sizeof(HostName)) == 0)
+      printf("%s\n",HostName);
+    else
+      fprintf(stderr,"Gethostname a echoue. \n");
+
+    
+    if ((host = gethostbyname(HostName)) != NULL) 
+    { 
+        int i; 
+  
+        for(i = 0; host->h_addr_list[i] != NULL; i++) 
+        { 
+            memcpy(&addr.s_addr, host->h_addr_list[i], sizeof(addr.s_addr)); 
+	    IPName=inet_ntoa(addr);
+	    printf("IP de %s : %s\n",HostName, IPName); 
+        } 
+    } 
+    else 
+        printf("La fonction gethostbyname a echoue.\n");
+
+}
 

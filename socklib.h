@@ -71,3 +71,17 @@ int EnvoieMessage(int s, const char* format, ...);
  *         * 1 s'il y a qqchose à lire
  */
 int TestLecture(int s);
+
+
+
+//Insertion Noeud
+
+//récuperation de l'ip de la machine (local) pour l'envoyer
+/**
+ *Récupère l'ip de la machine
+ *@param Hostname : nom de la machine
+ *@return void : affiche l'ip
+ *
+
+ */
+void GetIp();

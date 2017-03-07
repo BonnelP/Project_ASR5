@@ -5,11 +5,19 @@
 int main(int argc, char *argv[]) {
   int server = 0;
   int s;
+
+  //var pour récup addr Client
+  socklen_t len;
+  struct sockaddr_storage addr;
+  char ipstr[INET6_ADDRSTRLEN];
+  int port;
   
   if (argc == 2) {
     // je suis le serveur (l'argument est le port)
     server = 1;
 
+    
+    
     // Création de la socket d'attente
     int sock_attente = CreeSocketServeur(argv[1]);
     if (sock_attente == -1) {
@@ -18,11 +26,31 @@ int main(int argc, char *argv[]) {
 
     // attente du client
     s = AcceptConnexion(sock_attente);
+    
+    //Recuperation @ client
+    len = sizeof addr;
+    getpeername(s, (struct sockaddr*)&addr, &len);
 
+    // traiter IPv4 et IPv6:
+    if (addr.ss_family == AF_INET) {
+      struct sockaddr_in *s = (struct sockaddr_in *)&addr;
+      port = ntohs(s->sin_port);
+      inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
+    } else { // AF_INET6
+      struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
+      port = ntohs(s->sin6_port);
+      inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
+    }
+    printf("Client IP address: %s\n", ipstr);
+    printf("Client port      : %d\n", port);   
+
+      
   } else if (argc == 3){
     // Je suis le client
     server = 0;
 
+    GetIp();
+    
     // création d'une socker et connexion
     s = CreeSocketClient(argv[1], argv[2]);
   } else {
@@ -33,6 +61,9 @@ int main(int argc, char *argv[]) {
 
 
   if (server) {
+
+    
+    
     // un message à envoyer
     const char *mess = " Telle est la réponse à la question ... ";
 
@@ -42,6 +73,8 @@ int main(int argc, char *argv[]) {
     // Envoie d'un second message avec le reste
     EnvoieMessage(s, mess);
 
+
+    
   } else {
     char buff[31];
 
