@@ -248,7 +248,7 @@ int RecoieEtSauveDonnees(int fd, int s) {
 
     nb_recu += res;
 
-    //    fprintf(stdout, "Recu %d oct total %d oct\n", res, nb_recu);
+    fprintf(stdout, "Recu %d oct total %d oct\n", res, nb_recu);
 
     res2 = write(fd, buff, res);
     if (res != res2) {

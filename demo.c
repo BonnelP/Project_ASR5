@@ -1,6 +1,7 @@
 #include "socklib.h"
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 
 int main(int argc, char *argv[]) {
   int server = 0;
@@ -17,18 +18,14 @@ int main(int argc, char *argv[]) {
   
   //fichier de stockage des adresses
   FILE* StockAddr = NULL;
-  StockAddr = fopen("StockAddr.txt","a+");
-
-  if (StockAddr != NULL)
-    {
-      // On peut lire et écrire dans le fichier
-    }
-  else
-    {
-      // On affiche un message d'erreur si on veut
-      printf("Impossible d'ouvrir le fichier StockAddr.txt");
-    }
-
+  StockAddr = fopen("StockAddr.txt","a+");*/
+  
+    if (StockAddr == NULL)
+      {
+	// On affiche un message d'erreur si on veut
+	printf("Impossible d'ouvrir le fichier StockAddr.txt");
+      }
+    */
 
   
   if (argc == 2) {
@@ -72,7 +69,7 @@ int main(int argc, char *argv[]) {
 	perror("ERREUR de fork client");
 	exit(1);
       case 0:
-	/*On est le client*/
+	/*On est le fils*/
 	close(s);
 
 	//ici les actions a effectuer
@@ -97,33 +94,71 @@ int main(int argc, char *argv[]) {
 	printf("Client port      : %d\n", port);   
 	if (StockAddr != NULL)
 	  {
-
 	    fprintf(StockAddr,"%s\n",ipstr);
-
 	  }
+	
 	// Envoie d'un premier message avec la taille de la suite
 	EnvoieMessage(s, "TailleMessage:%16d", strlen(ipstr));
 	// Envoie d'un second message avec le reste
 	EnvoieMessage(s, ipstr);
-	close(s);
+
+	/*
+	//Reception mess client
+	char buff[31];
+	//lecture 30 prem. caract. puis ajout caract. fin de chaine
+	int r = recv(s,buff,30,MSG_WAITALL);
+	if (r ==-1){
+	  perror("recv serv");
+	}
+	buff[r] = '\0';
+	fprintf(stdout,"Le serveur a recu '%s'\n",buff);
+	//lecture 2nd mess
+	int taille;
+	sscanf(buff, "TailleMessage:%16d" ,&taille);
+	//lecture suite
+	char buff2[taille];
+	r = recv(s,buff2,taille,MSG_WAITALL);
+	if (r ==-1){
+	  perror("recv serv");
+	}
+
+	//affichage du message en stdout
+	write(STDOUT_FILENO,buff2,r);
+	fprintf(stdout,"\n");
+	*/
+	char * test = RecoieLigne(s);
+        write(STDOUT_FILENO,test,strlen(test));
+	int RESD = RecoieEtSauveDonnees(fdStock,s);
+	if(RESD == -1){
+	  fclose(StockAddr);
+	}
+	else{
+	  printf("\n%d octet lu\n",RESD);
+	}
+	close(s);	
       }
-
-
-      
-      usleep(5000);
+      fclose(StockAddr);
+      close(fdStock);
     }
   } else {
     char buff[31];
 
+    char Saisi[31];
+    Saisi[0] = '\0';
+    printf("A tous moment, saisissez FIN pour mettre arreter le programme \nVotre saisi ne peut exceder 30 caractere\n");
     // lecure des 30 premiers caractères
+    
     int r = recv(s, buff, 30, MSG_WAITALL);
+    
     if (r == -1) {
-      perror("recv");
+      perror("recv client");
+    }
+    if (r == 0 ){
+      printf("Attendez votre tours svp,un client communique deja avec le serveur");
     }
     // J'ajoute le caractère de fin de chaine à la fin du message recu
     buff[r] = '\0';
-    fprintf(stdout, "Le client à recu '%s'\n", buff);
-
+    fprintf(stdout, "Le client a recu '%s'\n", buff);
     // lecture de la taille du second message
     int taille;
     sscanf(buff, "TailleMessage:%16d", &taille);
@@ -138,6 +173,15 @@ int main(int argc, char *argv[]) {
     write(STDOUT_FILENO, buff2, r);
     fprintf(stdout, "\n");
     
+    fprintf(stdout,"\nEntrez le nom du fichier que vous cherchez\n");
+    scanf("%s",Saisi);
+    
+    // Envoie d'un premier message avec la taille de la suite
+    //EnvoieMessage(s, "TailleMessage:%16d", strlen(Saisi));
+    // Envoie d'un second message avec le reste
+    EnvoieMessage(s, Saisi);
+    
   }
   fclose(StockAddr);
+  close(fdStock);
 }
