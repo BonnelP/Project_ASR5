@@ -5,40 +5,60 @@
 
 #include <fcntl.h>
 
-#define TAILLE_MAX_NOMF 30
 #define NBR_MAX_VOISIN 3
+
+#define TAILLE_MAX_NOMF 30
 #define TAILLE_MAX_IP 15
+
 
 //taille max du message du protocole = (option) + | + (taille_addresse) + | + ipsrc + | + taille_mess2 + | + mess2 +
 //                                   :    1     + 1 +         2         + 1 +   15  + 1 +       2      + 1 +   45  +
 #define TAILLE_MAX_MESS 69
 
-void protocole(char *message, int option, size_t taille_mess2, char *mess2,char* ipsrc)
+#define OPT_INS	1
+#define OPT_FIC 2
+#define REP_INS 3
+
+void protocole(char *message, int option, size_t taille_mess2, char *mess2,char *ipsrc)
 {
+  //Nous utilisons des pipe pour séparer les divers elements pour une lisibilite accru, il faudra par la suite les enlevers car non necessaire(nous connaissons l'agencement et la taille des diferrentes parties!
+  
   //on concatène les différents parties du message à envoyer au serveur.
-  // ipsrc peut etre  NULL
+  // taille_mess2,mess2 et ipsrc peuvent etres  NULL ou 0
   // digit 1 : entier : option (1=insertion -- 2=recherche -- 0=Oquitter ...)
   sprintf(message,"%d",option);
 
   switch(option){
   case 1:
     // Si on choisit de s'inserer, le protocole sera comme ceci :
-    // type : #(option)
+    // type : #(option)| 
 	
     strcat(message, "|"); // ajout d'un pipe pour séparer
+    break;
   case 2:
     // Si on choisit de chercher un fichier, le protocole sera comme ceci :
     // type : #(option)|##(taille_addresse)|ipsrc|##(taille_mess2)|mess2 (où # est un digit et | des séparateurs)
     
     strcat(message, "|"); 
-
+    
     char tailleip[2];//stocke taille de l'ipsrc
-    sprintf(tailleip,"d",strlen(ipsrc));
+    if (strcmp(ipsrc,"") == 0){ 
+      sprintf(tailleip,"%lu",strlen(ipsrc));
+    }
+    else {
+      strcpy(tailleip,"00");
+    }
+      
     strcat(message, tailleip);
     
     strcat(message, "|");
     
-    strcat(message, ipsrc);
+    if (strcmp(ipsrc,"")!=0){ 
+      strcat(message, ipsrc);
+    }
+    else {
+      strcat(message,"0.0.0.0"); //s'il n'y a pas d'ipsrc on met 0.0.0.0 (qui ne peut pas etre une ip src)
+    }   
     
     strcat(message, "|");
     
@@ -50,12 +70,13 @@ void protocole(char *message, int option, size_t taille_mess2, char *mess2,char*
     strcat(message, "|");
       
     strcat(message, mess2);
+    break;
   case 3:
     // Si on repond a la demande d'insertion de le noeud, le protocole sera comme ceci:
     // type : #|##|#(full)|mess2
     // full=0 : le noeud possède au moins une place; =1 : le noeud est plein
     // mess2 contiendra quoiqu'il arrive la liste des voisins direct 
-
+    break;
   }
 	
 }
@@ -71,11 +92,43 @@ void AffMenu()
 }
 
 
+      
+
+char *decoupeStr (const char *src , int ind1 , int ind2)
+{
+  char *new_s = NULL;
+  //ind1 donne l'indice du debut de la chaine a extraire et ind2 donne la fin
+  
+  if (src != NULL && ind1 <= ind2)
+    {
+      new_s = malloc (sizeof (*new_s) * (ind2 - ind1 + 2));
+      if (new_s != NULL)
+	{
+	  int i;
+
+	  for (i = ind1; i <= ind2; i++)
+	    {
+	      new_s[i-ind1] = src[i];
+	    }
+	  new_s[i-ind1] = '\0';
+	}
+      else
+	{
+	  fprintf (stderr, "new_s n'a pas ete alloue en memoire\n");
+	  exit (EXIT_FAILURE);
+	}
+    }
+  return new_s;
+  free(new_s);
+}
+
+
+
+
 int main(int argc, char *argv[]) {
   int server = 0;
   int s;
-  //int pid1;
-  int resmenu;
+  int tailleEnvoye;
   
   //var pour récup addr Client
   socklen_t len;
@@ -155,10 +208,18 @@ int main(int argc, char *argv[]) {
       EnvoieMessage(s, "TailleMessage:%16d", strlen(ipstr));
       // Envoie d'un second message avec le reste
       EnvoieMessage(s, ipstr);
-
+      
 	  
-      char * test= RecoieLigne(s) ;
+      char * proto = RecoieLigne(s) ;
+      write(STDOUT_FILENO,proto,strlen(proto));
+      fprintf(stdout,"\n");
+
+      //Decryptage du protocole recu
+      char * test = decoupeStr(proto,0,0);
       write(STDOUT_FILENO,test,strlen(test));
+      
+      
+      
     }
     fclose(StockAddr);
   }
@@ -167,37 +228,41 @@ int main(int argc, char *argv[]) {
     char buff[31];
  
     char nomFile[31];
-    // lecure des 30 premiers caractères
-
+    int choix = 10; // choix > 2 pour etre sur que cela ne quitte pas le client(=0)
+    size_t tailleFile ;
+    
     AffMenu();
     char message[TAILLE_MAX_MESS];
     do{
       printf("\nQue choisissez-vous ? Tapez 1, 2 ou 0\n");
 		
-      scanf("%d",choix); //demande du choix
+      scanf("%d",&choix); //demande du choix
 
       switch(choix){
       case 0:
 	printf("Quitter\n");
-	
+	close(s);
 	break;
+	
       case 1:
 	printf("Vous avez choisi : Demande d'insertion dans le noeux \n\n");
-	
+	protocole(message,OPT_INS,0,NULL,NULL);	
 	break;
+	
       case 2:
 	printf("Vous avez choisi : Demander un fichier \n\n");
 	printf("Quel fichier voulez-vous? (30caractère max, evitez les espaces et caractères speciaux\n");
 	scanf("%s",nomFile);
-	
+	tailleFile=strlen(nomFile);
+	protocole(message,OPT_FIC,tailleFile,nomFile,"");
 	break;
+	
       default:
 	printf("Choix non disponible. Recommencez.\n");
-	
 	break;
+	
       }
     }while((choix>2));
-
     
     
     int r = recv(s, buff, 30, MSG_WAITALL);
@@ -208,7 +273,7 @@ int main(int argc, char *argv[]) {
 
     // J'ajoute le caractère de fin de chaine à la fin du message recu
     buff[r] = '\0';
-    fprintf(stdout, "Le client a recu '%s'\n", buff);
+    fprintf(stdout, "\nLe client a recu '%s'\n", buff);
     // lecture de la taille du second message
     int taille;
     sscanf(buff, "TailleMessage:%16d", &taille);
@@ -223,8 +288,9 @@ int main(int argc, char *argv[]) {
     write(STDOUT_FILENO, buff2, r);
     fprintf(stdout, "\n");
     
-    // Envoie d'un message
-    // EnvoieMessage(s, Saisi);
+    // Envoie du protocole
+    tailleEnvoye = EnvoieMessage(s, message);
+    printf("tailleEnvoye = %d \n",tailleEnvoye);
     fclose(StockAddr);
   }
 
