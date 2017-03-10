@@ -127,6 +127,7 @@ int main(int argc, char *argv[]) {
   int s;
   int tailleEnvoye;
   int nbrVoisins = 0;
+  int ping;
   
   //var pour récup addr Client
   socklen_t len;
@@ -170,6 +171,7 @@ int main(int argc, char *argv[]) {
       fclose(StockAddrServ);
       exit(1);
     }
+
     
     while(1){
       
@@ -179,6 +181,10 @@ int main(int argc, char *argv[]) {
 	perror("ERREUR acceptCo");
 	fclose(StockAddrServ);
 	exit(1);
+      }
+      
+      while(1){
+	
       }
       
       //Recuperation @ client
@@ -252,7 +258,13 @@ int main(int argc, char *argv[]) {
 	  int tailleMess2Int = strtol(tailleMess2,(char**)NULL,10);
 	  fprintf(stdout,"TailleMess2Int : %d \n",tailleMess2Int);
 	  
-	  char * nomFile = decoupeStr(proto,3+(tailleAddrInt+2),(3+(tailleAddrInt+2)+tailleMess2Int));
+	  char * nomFile;
+	  if(tailleMess2Int < 10){
+	    nomFile = decoupeStr(proto,3+(tailleAddrInt+1),(3+(tailleAddrInt+2)+tailleMess2Int));
+	  }
+	  else {
+	    nomFile = decoupeStr(proto,3+(tailleAddrInt+1),(3+(tailleAddrInt+2)+tailleMess2Int));
+	  }
 	  fprintf(stdout,"nomFile : %s \n",nomFile);
 
 	  fprintf(stdout,"Recherche du fichier en cours . . .\n");
