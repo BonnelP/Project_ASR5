@@ -5,7 +5,7 @@
 
 #include <fcntl.h>
 
-#define NBR_MAX_VOISIN 3
+#define NBR_MAX_VOISINS 3
 
 #define TAILLE_MAX_NOMF 30
 #define TAILLE_MAX_IP 15
@@ -15,13 +15,17 @@
 //                                   :    1     + 1 +         2         + 1 +   15  + 1 +       2      + 1 +   45  +
 #define TAILLE_MAX_MESS 69
 
+#define OPT_EXI 0 //option pour fermer le client
 #define OPT_INS	1
 #define OPT_FIC 2
-#define REP_INS 3
+#define OPT_CLO 3 // option pour fermer le client ET le serveur , utile principalement pour les tests*
+#define REP_INS 4
 
 void protocole(char *message, int option, size_t taille_mess2, char *mess2,char *ipsrc)
 {
   //Nous utilisons des pipe pour séparer les divers elements pour une lisibilite accru, il faudra par la suite les enlevers car non necessaire(nous connaissons l'agencement et la taille des diferrentes parties!
+
+   char tailleip[2];//stocke taille de l'ipsrc
   
   //on concatène les différents parties du message à envoyer au serveur.
   // taille_mess2,mess2 et ipsrc peuvent etres  NULL ou 0
@@ -31,47 +35,39 @@ void protocole(char *message, int option, size_t taille_mess2, char *mess2,char 
   switch(option){
   case 1:
     // Si on choisit de s'inserer, le protocole sera comme ceci :
-    // type : #(option)| 
-	
-    strcat(message, "|"); // ajout d'un pipe pour séparer
+    // type : #(option)| 	
     break;
+    
   case 2:
     // Si on choisit de chercher un fichier, le protocole sera comme ceci :
-    // type : #(option)|##(taille_addresse)|ipsrc|##(taille_mess2)|mess2 (où # est un digit et | des séparateurs)
-    
-    strcat(message, "|"); 
-    
-    char tailleip[2];//stocke taille de l'ipsrc
-    if (strcmp(ipsrc,"") == 0){ 
+    // type : #(option)|##(taille_addresse)|ipsrc(7 à 15)|##(taille_mess2)|mess2 (où # est un digit et | des séparateurs)      
+
+    if (strcmp(ipsrc,"") != 0){ 
       sprintf(tailleip,"%lu",strlen(ipsrc));
     }
     else {
-      strcpy(tailleip,"00");
-    }
-      
-    strcat(message, tailleip);
-    
-    strcat(message, "|");
-    
+      strcpy(tailleip,"07");
+    }      
+    strcat(message, tailleip);    
     if (strcmp(ipsrc,"")!=0){ 
       strcat(message, ipsrc);
     }
     else {
       strcat(message,"0.0.0.0"); //s'il n'y a pas d'ipsrc on met 0.0.0.0 (qui ne peut pas etre une ip src)
     }   
-    
-    strcat(message, "|");
-    
+   
     // 4 digit maximum pour la taille du rapport : entier
     char taille[2]; //pour stocker au plus 2 digit : la taille du nom du fichier
     sprintf(taille,"%lu",taille_mess2);
-    strcat(message, taille);
-      
-    strcat(message, "|");
-      
+    strcat(message, taille);     
     strcat(message, mess2);
     break;
+    
   case 3:
+    //fermerture du Client et du Serveur
+    break;
+    
+  case 4:
     // Si on repond a la demande d'insertion de le noeud, le protocole sera comme ceci:
     // type : #|##|#(full)|mess2
     // full=0 : le noeud possède au moins une place; =1 : le noeud est plein
@@ -87,7 +83,8 @@ void AffMenu()
   printf("\nMenu\n");
   printf("1 : Demande d'insertion dans le noeux\n");
   printf("2 : Demander un fichier\n");
-  printf("0 : Quitter\n");
+  printf("3 : Quitter la demo (!!Ferme egalement le serveur!!)\n");
+  printf("0 : fermer le client\n");
   printf("\n");
 }
 
@@ -129,6 +126,7 @@ int main(int argc, char *argv[]) {
   int server = 0;
   int s;
   int tailleEnvoye;
+  int nbrVoisins = 0;
   
   //var pour récup addr Client
   socklen_t len;
@@ -137,10 +135,10 @@ int main(int argc, char *argv[]) {
   int port;
 
   //fichier de stockage des adresses
-  FILE* StockAddr = NULL;
-  StockAddr = fopen("StockAddr.txt","a+");
+  FILE* StockAddrServ = NULL;
+  StockAddrServ = fopen("StockAddrServ.txt","a+");
   
-  if (StockAddr == NULL)
+  if (StockAddrServ == NULL)
     {
       // On affiche un message d'erreur si on veut
       printf("Impossible d'ouvrir le fichier StockAddr.txt");
@@ -169,7 +167,7 @@ int main(int argc, char *argv[]) {
     // Création de la socket d'attente
     int sock_attente = CreeSocketServeur(argv[1]);
     if (sock_attente == -1) {
-      fclose(StockAddr);
+      fclose(StockAddrServ);
       exit(1);
     }
     
@@ -179,7 +177,7 @@ int main(int argc, char *argv[]) {
       s = AcceptConnexion(sock_attente);
       if (s < 0){
 	perror("ERREUR acceptCo");
-	fclose(StockAddr);
+	fclose(StockAddrServ);
 	exit(1);
       }
       
@@ -198,10 +196,11 @@ int main(int argc, char *argv[]) {
 	inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
       }
       printf("\nClient IP address: %s\n", ipstr);
-      printf("Client port      : %d\n", port);   
-      if (StockAddr != NULL)
+      printf("Client port      : %d\n", port);
+      
+      if (StockAddrServ != NULL)
 	{
-	  fprintf(StockAddr,"%s\n",ipstr);
+	  fprintf(StockAddrServ,"%s\n",ipstr);
 	}
 	
       // Envoie d'un premier message avec la taille de la suite
@@ -214,14 +213,71 @@ int main(int argc, char *argv[]) {
       write(STDOUT_FILENO,proto,strlen(proto));
       fprintf(stdout,"\n");
 
-      //Decryptage du protocole recu
-      char * test = decoupeStr(proto,0,0);
-      write(STDOUT_FILENO,test,strlen(test));
+      //Decryptage du protocole recu => fonction spé?
+      char * option = decoupeStr(proto,0,0);
+      
+      if(strcmp(option,"0") == 0 )
+	{
+	  //A implementer quand on sort du noeud ' nbrVoisins-- '
+	  fprintf(stdout,"option : %s \n",option);
+	}
+      else if(strcmp(option,"1") == 0 )
+	{
+	  fprintf(stdout,"%s veut s'inserer dans le noeud !\nVerification de la disponibilite...  \n",ipstr);
+	  if(nbrVoisins < NBR_MAX_VOISINS )
+	    {
+	      nbrVoisins++;
+	      fprintf(stdout,"Une place est libre, il y a maintenant %d voisins direct\n",nbrVoisins);
+	    }
+	  else
+	    {
+	      fprintf(stdout,"Nombre de voisins maximum\n");
+	      // On envoie une reponse contenant les voisins direct du serveur
+	    }
+	
+	}
+      else if(strcmp(option,"2") == 0 )
+	{	
+	  fprintf(stdout,"\nLe client demande un fichier \n");
+	  //faire les decoupage petit a petit! ici on passe direct a la lecture du nomFile pour les tests
+	  char * tailleAddr = decoupeStr(proto,1,2);
+	  int tailleAddrInt = strtol(tailleAddr,(char**)NULL,10);
+	  fprintf(stdout,"TailleAddrInt : %d \n",tailleAddrInt);
+
+	  char * ipsrc = decoupeStr(proto,3,3+(tailleAddrInt-1)); //Le calcul semble compliqué et inutile mais est ecrit de cette maniere afin de rendre compte de la fon dont est lu l'ipsrc
+	  
+	  fprintf(stdout,"ipsrc : %s \n",ipsrc);
+	  
+	  char * tailleMess2 = decoupeStr(proto,3+tailleAddrInt,3+(tailleAddrInt+1));
+	  int tailleMess2Int = strtol(tailleMess2,(char**)NULL,10);
+	  fprintf(stdout,"TailleMess2Int : %d \n",tailleMess2Int);
+	  
+	  char * nomFile = decoupeStr(proto,3+(tailleAddrInt+2),(3+(tailleAddrInt+2)+tailleMess2Int));
+	  fprintf(stdout,"nomFile : %s \n",nomFile);
+
+	  fprintf(stdout,"Recherche du fichier en cours . . .\n");
+	  /*
+	    if (execv("./", "ps") == -1) {
+	    perror("execv");
+	    return EXIT_FAILURE;
+	    }*/
+	  
+	}
+      else if(strcmp(option,"3") == 0 ){
+	fprintf(stdout,"Le serveur va se fermer à la demande du Client\n");
+	break;
+      }
+	
+      else
+	{
+	  fprintf(stdout,"Erreur de lecture du protocole\n");
+	}
       
       
       
     }
-    fclose(StockAddr);
+    fclose(StockAddrServ);
+    close(s);
   }
   else {
     //On est le client
@@ -234,7 +290,7 @@ int main(int argc, char *argv[]) {
     AffMenu();
     char message[TAILLE_MAX_MESS];
     do{
-      printf("\nQue choisissez-vous ? Tapez 1, 2 ou 0\n");
+      printf("\nQue choisissez-vous ? Tapez 1, 2, 3 ou 0\n");
 		
       scanf("%d",&choix); //demande du choix
 
@@ -246,7 +302,7 @@ int main(int argc, char *argv[]) {
 	
       case 1:
 	printf("Vous avez choisi : Demande d'insertion dans le noeux \n\n");
-	protocole(message,OPT_INS,0,NULL,NULL);	
+	protocole(message,OPT_INS,0,NULL,"");	
 	break;
 	
       case 2:
@@ -256,42 +312,48 @@ int main(int argc, char *argv[]) {
 	tailleFile=strlen(nomFile);
 	protocole(message,OPT_FIC,tailleFile,nomFile,"");
 	break;
-	
+      case 3:
+	printf("Vous avez choisi : Quitter la demo \n\n");
+	protocole(message,OPT_CLO,0,NULL,"");
+	break;
       default:
 	printf("Choix non disponible. Recommencez.\n");
 	break;
 	
       }
-    }while((choix>2));
+    }while((choix>3));
     
+    if(choix != 0)
+      {
+	int r = recv(s, buff, 30, MSG_WAITALL);
     
-    int r = recv(s, buff, 30, MSG_WAITALL);
-    
-    if (r == -1) {
-      perror("recv client");
-    }
-
-    // J'ajoute le caractère de fin de chaine à la fin du message recu
-    buff[r] = '\0';
-    fprintf(stdout, "\nLe client a recu '%s'\n", buff);
-    // lecture de la taille du second message
-    int taille;
-    sscanf(buff, "TailleMessage:%16d", &taille);
-    // lecure de la suite du message
-    char buff2[taille];
-    r = recv(s, buff2, taille, MSG_WAITALL);
-    if (r == -1) {
-      perror("recv");
-    }
-
-    // ecriture du message (comme un ensemble d'octet et pas comme une chaine de caractère)
-    write(STDOUT_FILENO, buff2, r);
-    fprintf(stdout, "\n");
-    
-    // Envoie du protocole
-    tailleEnvoye = EnvoieMessage(s, message);
-    printf("tailleEnvoye = %d \n",tailleEnvoye);
-    fclose(StockAddr);
+	if (r == -1) {
+	  perror("recv client");
+	}
+	
+	// J'ajoute le caractère de fin de chaine à la fin du message recu
+	buff[r] = '\0';
+	fprintf(stdout, "\nLe client a recu '%s'\n", buff);
+	// lecture de la taille du second message
+	int taille;
+	sscanf(buff, "TailleMessage:%16d", &taille);
+	// lecure de la suite du message
+	char buff2[taille];
+	r = recv(s, buff2, taille, MSG_WAITALL);
+	if (r == -1) {
+	  perror("recv");
+	}
+	
+	// ecriture du message (comme un ensemble d'octet et pas comme une chaine de caractère)
+	write(STDOUT_FILENO, buff2, r);
+	fprintf(stdout, "\n");
+       
+	// Envoie du protocole
+	tailleEnvoye = EnvoieMessage(s, message);
+	printf("tailleEnvoye = %d \n",tailleEnvoye);
+      }
+    close(s);
+    fclose(StockAddrServ);
   }
 
 }
