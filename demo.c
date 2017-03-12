@@ -20,35 +20,34 @@
 #define OPT_EXI 0 
 #define OPT_INS	1
 #define OPT_FIC 2
-#define OPT_CLO 3 // option pour fermer le client ET le serveur , utile principalement pour les tests
-#define REP_INS 4
+#define REP_INS 3
 
 int main(int argc, char *argv[]) {
   int server = 0;
   int s;
   int tailleEnvoye;
-  int nbrVoisins = 0;
   int pid;
+  int pipePid[2];
   
   //var pour récup addr Client
   char  ipstr[INET6_ADDRSTRLEN];
   int port;
 
+  /*
   //fichier de stockage des adresses
   FILE* StockAddrServ = NULL;
   StockAddrServ = fopen("StockAddrServ.txt","a+");
-  
-  
-  //message qui sera envoyer par le protocole
-  char message[TAILLE_MAX_MESS];
-  
   
   if (StockAddrServ == NULL)
     {
       // On affiche un message d'erreur si on veut
       printf("Impossible d'ouvrir le fichier StockAddr.txt");
-      }
+    }
+  */
   
+  //message qui sera envoyer par le protocole
+  char message[TAILLE_MAX_MESS]; 
+
   if (argc == 2)
     {
       // je suis le serveur (l'argument est le port)
@@ -72,7 +71,8 @@ int main(int argc, char *argv[]) {
 
   if (server)
     {
-    
+      int nbrVoisins = 0;
+      int newVoisins; // +1 ou -1 en fonction de ce que le client fait (entre ou sort)     
       // Création de la socket d'attente
       int sock_attente = CreeSocketServeur(argv[1]);
       if (sock_attente == -1)
@@ -90,13 +90,24 @@ int main(int argc, char *argv[]) {
 
 	  else
 	    {
+	      newVoisins = 0;
+	      if(pipe(pipePid) != 0)
+		{
+		  fprintf(stderr, "Erreur de création du tube.\n");
+		  exit(1);
+		}
+
 	      pid = fork();
 	      if (pid < 0)
 		{
 		  perror("ERREUR fork pid");
 		}
 	      if (pid == 0)
-		{		  
+		{
+		  //On ferme la lecture car on utilisera le pipe pour renseigner le nbr de voisins
+		  close(pipePid[0]);
+		  
+		  //Processus gerant la demande du/des client(s)	  
 		  socklen_t len;
 		  struct sockaddr_storage addr;
 
@@ -119,13 +130,15 @@ int main(int argc, char *argv[]) {
 		  printf("\nClient IP address: %s\n", ipstr);
 		  printf("Client port      : %d\n", port);
 
+		  /*
 		  //On garde une trace des adresses qui ce sont connectees au serveur
-		  
+		  //Creer un "double free or corruption" , à corriger si possible
 		  if (StockAddrServ != NULL)
-		    {
-		      fprintf(StockAddrServ,"%s %d\n",ipstr,port);
-		      fclose(StockAddrServ);
-		    }	      
+		  {
+		  fprintf(StockAddrServ,"%s %d\n",ipstr,port);
+		  fclose(StockAddrServ);
+		  }	      
+		  */
 		  
 		  char * proto = RecoieLigne(s) ;
 		  if (proto != NULL)
@@ -133,22 +146,25 @@ int main(int argc, char *argv[]) {
 		      write(STDOUT_FILENO,proto,strlen(proto));
 		      fprintf(stdout,"\n");
 
-		      //Decryptage du protocole recu cote serveur
+		      //Lecture du protocole recu cote serveur
 		      char * option = decoupeStr(proto,0,0);
       
 		      if(strcmp(option,"0") == 0 )
 			{
 			  fprintf(stdout,"Le client a fermer sa connexion, une place viens de se liberer dans le noeud\n");
-			  if (nbrVoisins > 0){nbrVoisins--;}
+			  if (nbrVoisins > 0)
+			    {
+			      newVoisins = -1;
+			    }
 			}
 		  
 		      else if(strcmp(option,"1") == 0 )
 			{
 			  fprintf(stdout,"%s veut s'inserer dans le noeud !\nVerification de la disponibilite...  \n",ipstr);
-			  if(nbrVoisins < NBR_MAX_VOISINS )
+			  if(nbrVoisins < NBR_MAX_VOISINS )//s'il reste 1 place c'est bon
 			    {
-			      nbrVoisins++;
-			      fprintf(stdout,"Une place est libre, il y a maintenant %d voisins direct\n",nbrVoisins);
+			      newVoisins = 1;
+			      fprintf(stdout,"Une place est libre, il y a maintenant %d voisins direct\n",(nbrVoisins+newVoisins));
 			      protocole(message,REP_INS,0,NULL,"");
 			      EnvoieMessage(s,message);
 			    }
@@ -201,18 +217,9 @@ int main(int argc, char *argv[]) {
 			      homedir = pw->pw_dir;
 			    }
 			  fprintf(stdout,"nomFile : %s \n",nomFile);
-			  //fprintf(stdout,"Recherche du fichier en cours . . .\n");
-			  EnvoieMessage(s,"Recherche du fichier en cours . . .\n");
-			  // system("find ~ -name 'serveur.c' -print");
+			  fprintf(stdout,"Recherche du fichier en cours . . .\n");
+			  //EnvoieMessage(s,"Recherche du fichier en cours . . .\n");
 			  execlp("find","find",homedir,"-name",nomFile,NULL);
-
-			}
-		  
-		      else if(strcmp(option,"3") == 0 )
-			{
-			  fprintf(stdout,"Le serveur va se fermer à la demande du Client\n");
-			  close(s);
-			  exit(0);
 			}
 	
 		      else
@@ -220,11 +227,20 @@ int main(int argc, char *argv[]) {
 			  fprintf(stdout,"Erreur de lecture du protocole\n");
 			}
 		    }
+		  write(pipePid[1],&newVoisins,sizeof(newVoisins));
 		}
-	      else
+	      else if(pid > 0)
 		{
+		  close(pipePid[1]);
+		  read(pipePid[0],&newVoisins,sizeof(newVoisins));		  
 		  close(s);
 		}
+	      else//Normalement nous n'arrivons jamais ici si les calculs du nbrVoisins ont bien ete effectue
+		{
+		  printf("Le serveur est plein\n");
+		  //EnvoieMessage(s,"Le serveur est plein\n");
+		}
+	      nbrVoisins = nbrVoisins + newVoisins;		
 	    }
 	}
     }
@@ -234,12 +250,12 @@ int main(int argc, char *argv[]) {
       char nomFile[31];
       int choix = 10; // choix > 3 pour etre sur que cela ne quitte pas le client(=0)
       int tailleFile ;
-    
+      // int pidC;
       AffMenu();
       
       do
 	{
-	  printf("\nQue choisissez-vous ? Tapez 1, 2, 3 ou 0\n");
+	  printf("\nQue choisissez-vous ? Tapez 1, 2 ou 0\n(Attention taper autre chose que des chiffres peut entrainer un disfonctionnement\n");
 	  scanf("%d",&choix); //demande du choix
 	  
 	  switch(choix)
@@ -263,18 +279,13 @@ int main(int argc, char *argv[]) {
 	      tailleFile=strlen(nomFile);
 	      protocole(message,OPT_FIC,tailleFile,nomFile,"");
 	      break;
-	    case 3:
-	      printf("Vous avez choisi : Quitter la demo \n\n");
-	      protocole(message,OPT_CLO,0,NULL,"");
-	      EnvoieMessage(s, message);
-	      close(s);
-	      exit(0);
+	      
 	    default:
 	      printf("Choix invalide. Recommencez.\n");
 	      break;
 	
 	    }
-	}while((choix > 3));
+	}while((choix > 2));
     
       printf("Le protocole donne : %s \n",message);	
       if(choix != 0)
@@ -283,31 +294,44 @@ int main(int argc, char *argv[]) {
 	  tailleEnvoye = EnvoieMessage(s, message);
 	  printf("tailleEnvoye = %d \n",tailleEnvoye);
 	}
-      /*   
-	   char * protoC = RecoieLigne(s) ;
-	   if (protoC != NULL)
-	   {
-	   write(STDOUT_FILENO,protoC,strlen(protoC));
-	   fprintf(stdout,"\n");
+      /*
+      pidC=fork();
+      if (pidC < 0)
+	{
+	  perror("ERREUR fork pid");
+	}
+      else if(pidC == 0)
+	{
+	  char * protoC = RecoieLigne(s) ;
+	  if (protoC != NULL)
+	    {
+	      write(STDOUT_FILENO,protoC,strlen(protoC));
+	      fprintf(stdout,"\n");
 
-	   //Decryptage du protocole recu cote client
-	   char * optionC = decoupeStr(protoC,0,0);    
-	   if(strcmp(optionC,"4") == 0 )
-	   {
-	   fprintf(stdout,"optionC : %s \n",optionC);
-	   char * full = decoupeStr(protoC,1,1);
-	   if(strcmp(full,"0") == 0 )
-	   {
-	   fprintf(stdout,"Le serveur est plein.");
-	   }
-	   else if(strcmp(full,"1") == 0 )
-	   {
-	   fprintf(stdout,"L'ajout dans le noeud a bien ete effectue.");
-	   }
-	   } 
-	   }*/
+	      //Lecture du protocole recu cote client
+	      char * optionC = decoupeStr(protoC,0,0);    
+	      if(strcmp(optionC,"4") == 0 )
+		{
+		  fprintf(stdout,"optionC : %s \n",optionC);
+		  char * full = decoupeStr(protoC,1,1);
+		  if(strcmp(full,"0") == 0 )
+		    {
+		      fprintf(stdout,"Le serveur est plein.");
+		    }
+		  else if(strcmp(full,"1") == 0 )
+		    {
+		      fprintf(stdout,"L'ajout dans le noeud a bien ete effectue.");
+		    }
+		}
+	    }
+	}
+      else if(pidC > 0)
+	{
+	  close(s);
+	  // fclose(StockAddrServ);
+	}
+      */
       close(s);
-      fclose(StockAddrServ);
     }
 }
 
