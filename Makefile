@@ -6,13 +6,13 @@ POINTH=$(wildcard *.h)
 POINTHPP=$(wildcard *.hpp)
 LIBCPP=
 LIBC=socklib.c
-
+ANNEXESC=annexes.c
 FICHIERSBAK=$(wildcard *~)
 
 
 EXE=$(CODEC:.c=.ex) $(CODECPP:.cpp=.exx)
 LIBCPPO=$(LIBCPP:.cpp=.O)
-LIBCO=$(LIBC:.c=.o)
+LIBCO=$(LIBC:.c=.o) $(ANNEXESC:.c=.o)
 
 
 CC=gcc

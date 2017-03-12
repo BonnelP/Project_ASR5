@@ -402,32 +402,3 @@ int TestLecture(int s) {
 
   return res;
 }
-
-
-char *fgets_nonbloquant(char *Saisi, const int taille, FILE *f) {
-  int oldattr = fcntl(fileno(f), F_GETFL);
-  if (oldattr==-1)
-    {
-      perror("fcntl");
-      exit(1);
-    }
-  // on ajoute l'option non blocante
-  int r = fcntl(fileno(f), F_SETFL, oldattr | O_NONBLOCK);
-  if (r==-1)
-    {
-      perror("fcntl");
-      exit(1);
-    }
-
-  char * res = fgets(Saisi,taille,stdin);
-
-
-  r = fcntl(fileno(f), F_SETFL, oldattr);
-  if (r==-1)
-    {
-      perror("fcntl");
-      exit(1);
-    }
-
-  return res;
-}
